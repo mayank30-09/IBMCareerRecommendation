@@ -16,8 +16,11 @@ graph TD
     API -->|Validation & Middleware| Val[express-validator]
     API -->|Request ID & Hardening| Sec[Helmet / CORS / RateLimit]
     API -->|Prompt Construction| Prompt[Recommendation Prompt Builder]
-    Prompt -->|Send Prompt| Gemini[GeminiService SDK]
+    Prompt -->|Select Provider| Service[Recommendation Service]
+    Service -->|AI_PROVIDER=gemini| Gemini[GeminiService SDK]
+    Service -->|AI_PROVIDER=openrouter| OpenRouter[OpenRouterService REST]
     Gemini -->|Extract & Validate JSON| Validator[AI Output Validator]
+    OpenRouter -->|Extract & Validate JSON| Validator
     Validator -->|Persist Recommendation| Repo[Recommendation Repository]
     Repo -->|Insert Document| DB[(MongoDB)]
     API -->|JSON Response| Client
@@ -27,12 +30,12 @@ graph TD
 
 ## ✨ Features
 
-- **Google Gemini AI Integration**: Dynamic fallback probing (`gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.0-flash`, `gemini-1.5-flash`) with exponential backoff retries.
+- **Multi-Provider AI Architecture**: Seamlessly switch between **OpenRouter** (`openai/gpt-oss-20b:free`) and **Google Gemini AI** (`gemini-2.5-flash`) via `AI_PROVIDER` environment variable with zero code modifications.
 - **Strict Response Validation**: Validates, sanitizes, deduplicates skills, and clamps AI confidence scores before persistence.
-- **MongoDB Persistence**: Mongoose schema storing user profile inputs, AI recommendations, and performance metadata.
+- **MongoDB Persistence**: Mongoose schema storing user profile inputs, AI recommendations, active provider metadata, and response performance.
 - **Production Hardening**: Security headers (`helmet`), configurable CORS, rate limiting, request size limits (`10kb`), and gzip compression (`compression`).
 - **Distributed Request Tracing**: Every request is assigned or reuses a unique `X-Request-ID` correlated across Pino JSON logs.
-- **Health & Readiness Endpoints**: Liveness (`GET /health`) and internal non-network readiness (`GET /ready`) monitoring.
+- **Health & Readiness Endpoints**: Liveness (`GET /health`) and internal non-network readiness (`GET /ready`) monitoring for active DB & AI providers.
 
 ---
 

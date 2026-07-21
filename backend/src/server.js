@@ -23,13 +23,15 @@ if (require.main === module) {
   connectDB()
     .then(() => {
       server = app.listen(port, () => {
-        let geminiStatus = 'not configured';
+        let aiProviderStatus = 'not configured';
+        let activeProviderName = (process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
         try {
-          const geminiService = require('./services/gemini.service');
-          geminiService.validateConfig();
-          geminiStatus = 'configured';
+          const recommendationService = require('./services/recommendation.service');
+          const aiService = recommendationService.getAiService();
+          aiService.validateConfig();
+          aiProviderStatus = 'configured';
         } catch (err) {
-          geminiStatus = 'not configured';
+          aiProviderStatus = 'not configured';
         }
 
         // Print clean, deployment-friendly verification banner
@@ -38,11 +40,11 @@ if (require.main === module) {
         console.log(`Environment: ${NODE_ENV}`);
         console.log(`Port: ${port}`);
         console.log('MongoDB: connected');
-        console.log(`Gemini: ${geminiStatus}`);
+        console.log(`AI Provider (${activeProviderName}): ${aiProviderStatus}`);
         console.log('Version: 1.0.0');
         console.log('=================================\n');
 
-        logger.info({ port, mode: NODE_ENV, gemini: geminiStatus }, `Server running in ${NODE_ENV} mode on port ${port}`);
+        logger.info({ port, mode: NODE_ENV, provider: activeProviderName, aiStatus: aiProviderStatus }, `Server running in ${NODE_ENV} mode on port ${port}`);
       });
     })
     .catch((err) => {

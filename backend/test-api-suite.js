@@ -1,6 +1,7 @@
 const http = require('http');
 const assert = require('assert');
 
+process.env.AI_PROVIDER = 'gemini';
 process.env.GEMINI_API_KEY = 'test-key-123';
 process.env.GEMINI_MODEL = 'gemini-2.5-flash';
 process.env.PORT = '0';

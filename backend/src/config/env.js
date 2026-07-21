@@ -12,8 +12,11 @@ const env = {
   CORS_ORIGIN: process.env.CORS_ORIGIN || process.env.CLIENT_URL || '*',
   CLIENT_URL: process.env.CLIENT_URL || process.env.CORS_ORIGIN || '*',
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/careerpilot',
+  AI_PROVIDER: process.env.AI_PROVIDER || 'gemini',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || '',
+  OPENROUTER_MODEL: process.env.OPENROUTER_MODEL || 'openai/gpt-oss-20b:free',
   REQUEST_TIMEOUT: process.env.REQUEST_TIMEOUT || '15000',
   BODY_LIMIT: process.env.BODY_LIMIT || '10kb',
   RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS || '900000', // 15 mins
@@ -48,6 +51,12 @@ function validateEnv(customEnv = null, options = { strict: true }) {
     errors.push(`Invalid NODE_ENV: '${targetEnv.NODE_ENV}'. Must be one of: ${validEnvs.join(', ')}.`);
   }
 
+  const validProviders = ['gemini', 'openrouter'];
+  const provider = (targetEnv.AI_PROVIDER || 'gemini').toLowerCase().trim();
+  if (!validProviders.includes(provider)) {
+    errors.push(`Invalid AI_PROVIDER: '${targetEnv.AI_PROVIDER}'. Must be one of: ${validProviders.join(', ')}.`);
+  }
+
   const timeout = parseInt(targetEnv.REQUEST_TIMEOUT, 10);
   if (isNaN(timeout) || timeout <= 0) {
     errors.push(`Invalid REQUEST_TIMEOUT: '${targetEnv.REQUEST_TIMEOUT}'. Must be a positive integer in milliseconds.`);
@@ -67,8 +76,21 @@ function validateEnv(customEnv = null, options = { strict: true }) {
     if (!targetEnv.MONGODB_URI || typeof targetEnv.MONGODB_URI !== 'string' || targetEnv.MONGODB_URI.trim() === '') {
       errors.push('Missing MONGODB_URI. A valid MongoDB connection string is required.');
     }
-    if (!targetEnv.GEMINI_API_KEY || typeof targetEnv.GEMINI_API_KEY !== 'string' || targetEnv.GEMINI_API_KEY.trim() === '') {
-      errors.push('Missing GEMINI_API_KEY. A valid Gemini API key is required.');
+
+    if (provider === 'gemini') {
+      if (!targetEnv.GEMINI_API_KEY || typeof targetEnv.GEMINI_API_KEY !== 'string' || targetEnv.GEMINI_API_KEY.trim() === '') {
+        errors.push('Missing GEMINI_API_KEY. A valid Gemini API key is required when AI_PROVIDER is gemini.');
+      }
+    } else if (provider === 'openrouter') {
+      if (
+        !targetEnv.OPENROUTER_API_KEY ||
+        typeof targetEnv.OPENROUTER_API_KEY !== 'string' ||
+        targetEnv.OPENROUTER_API_KEY.trim() === '' ||
+        targetEnv.OPENROUTER_API_KEY.includes('your-key') ||
+        targetEnv.OPENROUTER_API_KEY.includes('xxxxxxxx')
+      ) {
+        errors.push('Missing OPENROUTER_API_KEY. A valid OpenRouter API key is required when AI_PROVIDER is openrouter.');
+      }
     }
   }
 

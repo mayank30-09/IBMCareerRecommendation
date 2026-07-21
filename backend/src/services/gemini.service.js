@@ -2,6 +2,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const env = require('../config/env');
 const httpStatus = require('../constants/httpStatus');
 const errorCodes = require('../constants/errorCodes');
+const logger = require('../config/logger');
 
 class GeminiService {
   constructor() {
@@ -260,12 +261,12 @@ class GeminiService {
 
     for (const modelCandidate of candidateModels) {
       try {
-        console.log(`[GeminiService] Probing model availability for: ${modelCandidate}...`);
+        logger.debug({ provider: 'gemini', modelCandidate }, `Probing Gemini model availability for ${modelCandidate}...`);
         await this.executeContentGeneration(modelCandidate, 'ping');
 
         // Lock and cache the first model that successfully responds
         this.activeModel = modelCandidate;
-        console.log(`[GeminiService] Successfully validated and cached active model: ${this.activeModel}`);
+        logger.info({ provider: 'gemini', activeModel: this.activeModel }, `Successfully validated and cached active model: ${this.activeModel}`);
         return this.activeModel;
       } catch (err) {
         lastError = err;
@@ -273,7 +274,7 @@ class GeminiService {
 
         // If error is 429 / quota exhaustion, stop immediately without probing shared project quota models
         if (this.isQuotaError(err)) {
-          console.warn(`[GeminiService] Quota exceeded on model '${modelCandidate}'. Stopping model fallback probing immediately.`);
+          logger.warn({ provider: 'gemini', modelCandidate }, `Quota exceeded on model '${modelCandidate}'. Stopping model fallback probing immediately.`);
           const quotaErr = new Error('The AI service is temporarily unavailable because the current API quota has been reached. Please try again later.');
           quotaErr.statusCode = httpStatus.TOO_MANY_REQUESTS || 429;
           quotaErr.code = errorCodes.AI_SERVICE_ERROR || 'AI_QUOTA_EXCEEDED';
@@ -348,7 +349,7 @@ class GeminiService {
 
         if (attempt < maxAttempts && isTransient) {
           const delay = baseBackoff * Math.pow(2, attempt - 1);
-          console.warn(`[GeminiService] Retry attempt ${attempt}/${maxAttempts} after transient error. Waiting ${delay}ms...`);
+          logger.warn({ provider: 'gemini', attempt, maxAttempts, delay }, `AI service retry attempt ${attempt}/${maxAttempts} after transient error`);
           await this.sleep(delay);
         } else {
           break;

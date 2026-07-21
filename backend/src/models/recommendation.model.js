@@ -65,6 +65,10 @@ const recommendationSchema = new mongoose.Schema(
       }
     },
     metadata: {
+      provider: {
+        type: String,
+        default: 'gemini'
+      },
       model: {
         type: String,
         default: 'placeholder'

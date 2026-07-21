@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const geminiService = require('./gemini.service');
+const recommendationService = require('./recommendation.service');
 
 const getHealthStatus = (req) => {
   return {
@@ -18,26 +18,25 @@ const getReadinessStatus = async () => {
     ? process.env.MOCK_DB_CONNECTED === 'true'
     : (mongoose.connection && mongoose.connection.readyState === 1);
 
-  // 2. Verify Gemini API setup internally without making external network calls
-  let isGeminiReady = false;
+  // 2. Verify active AI provider setup internally without making external network calls
+  let isAiReady = false;
   try {
-    // Validate that API key and required config variables exist and are populated
-    geminiService.validateConfig();
-    // Verify Gemini service is instantiated/initializable
-    const client = geminiService.getClient();
-    isGeminiReady = !!client;
+    const aiService = recommendationService.getAiService();
+    aiService.validateConfig();
+    isAiReady = true;
   } catch (err) {
-    isGeminiReady = false;
+    isAiReady = false;
   }
 
-  const isReady = isDbConnected && isGeminiReady;
+  const isReady = isDbConnected && isAiReady;
 
   return {
     isReady,
     status: isReady ? 'ready' : 'unready',
     checks: {
       database: isDbConnected ? 'up' : 'down',
-      gemini: isGeminiReady ? 'up' : 'down'
+      aiProvider: isAiReady ? 'up' : 'down',
+      gemini: isAiReady ? 'up' : 'down'
     },
     timestamp: new Date().toISOString()
   };

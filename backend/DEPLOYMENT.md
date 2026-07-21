@@ -13,7 +13,11 @@ Ensure the following environment variables are provisioned in your hosting envir
 | `PORT` | Yes | `5000` | HTTP listening port |
 | `NODE_ENV` | Yes | `production` | Runtime mode (`production`) |
 | `MONGODB_URI` | Yes | N/A | MongoDB Atlas connection string |
-| `GEMINI_API_KEY` | Yes | N/A | Valid Google Gemini AI API key |
+| `AI_PROVIDER` | Yes | `gemini` | Active AI provider (`gemini` or `openrouter`) |
+| `OPENROUTER_API_KEY` | Conditional | N/A | OpenRouter API Key (required when `AI_PROVIDER=openrouter`) |
+| `OPENROUTER_MODEL` | No | `openai/gpt-oss-20b:free` | Configured OpenRouter model candidate |
+| `GEMINI_API_KEY` | Conditional | N/A | Valid Google Gemini AI API key (required when `AI_PROVIDER=gemini`) |
+| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Configured Gemini model candidate |
 | `CORS_ORIGIN` | Yes | `*` | Allowed client domain(s) |
 | `REQUEST_TIMEOUT` | No | `15000` | AI request timeout in ms |
 | `BODY_LIMIT` | No | `10kb` | Maximum JSON request size |
