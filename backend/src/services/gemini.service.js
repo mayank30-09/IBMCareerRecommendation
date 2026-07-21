@@ -67,12 +67,31 @@ class GeminiService {
   }
 
   /**
+   * Helper method to detect API quota / rate limit exhaustion (429 or quota exceeded).
+   */
+  isQuotaError(error) {
+    if (!error) return false;
+    const msg = error.message ? error.message.toLowerCase() : '';
+    const status = error.status || error.statusCode;
+
+    return (
+      status === 429 ||
+      msg.includes('quota') ||
+      msg.includes('resource_exhausted') ||
+      msg.includes('too many requests') ||
+      msg.includes('limit: 0')
+    );
+  }
+
+  /**
    * Determines if an error is a transient failure worthy of a retry.
-   * Retries ONLY for: 429, 500, 502, 503, 504, ECONNRESET, ETIMEDOUT, Network timeout.
-   * NEVER retries for: 400, 401, 403, 404, quota exhausted (permanent), safety blocked, invalid key.
+   * Retries ONLY for: 500, 502, 503, 504, ECONNRESET, ETIMEDOUT, Network timeout.
+   * NEVER retries for: 400, 401, 403, 404, 429 quota exhausted (permanent per window), safety blocked, invalid key.
    */
   isTransientError(error) {
     if (!error) return false;
+    if (this.isQuotaError(error)) return false;
+
     const msg = error.message ? error.message.toLowerCase() : '';
     const status = error.status || error.statusCode;
 
@@ -84,8 +103,6 @@ class GeminiService {
       status === 404 ||
       msg.includes('invalid api key') ||
       msg.includes('api_key_invalid') ||
-      msg.includes('quota') ||
-      msg.includes('resource_exhausted') ||
       msg.includes('permission_denied') ||
       msg.includes('safety') ||
       msg.includes('blocked')
@@ -93,8 +110,8 @@ class GeminiService {
       return false;
     }
 
-    // Transient HTTP status codes
-    if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
+    // Transient HTTP status codes (excluding 429 quota)
+    if (status === 500 || status === 502 || status === 503 || status === 504) {
       return true;
     }
 
@@ -254,6 +271,16 @@ class GeminiService {
         lastError = err;
         const msg = err.message ? err.message.toLowerCase() : '';
 
+        // If error is 429 / quota exhaustion, stop immediately without probing shared project quota models
+        if (this.isQuotaError(err)) {
+          console.warn(`[GeminiService] Quota exceeded on model '${modelCandidate}'. Stopping model fallback probing immediately.`);
+          const quotaErr = new Error('The AI service is temporarily unavailable because the current API quota has been reached. Please try again later.');
+          quotaErr.statusCode = httpStatus.TOO_MANY_REQUESTS || 429;
+          quotaErr.code = errorCodes.AI_SERVICE_ERROR || 'AI_QUOTA_EXCEEDED';
+          throw quotaErr;
+        }
+
+        // Only fallback to next model if the model is genuinely 404/invalid/not found
         if (
           err.status === 404 ||
           msg.includes('not found') ||
@@ -307,6 +334,16 @@ class GeminiService {
         return await this.executeContentGeneration(modelName, promptText);
       } catch (error) {
         lastError = error;
+
+        // If quota error occurs during prompt execution, throw friendly error immediately without retry loop
+        if (this.isQuotaError(error)) {
+          console.warn(`[GeminiService] Quota error during prompt execution. Stopping retries immediately.`);
+          const quotaErr = new Error('The AI service is temporarily unavailable because the current API quota has been reached. Please try again later.');
+          quotaErr.statusCode = httpStatus.TOO_MANY_REQUESTS || 429;
+          quotaErr.code = errorCodes.AI_SERVICE_ERROR || 'AI_QUOTA_EXCEEDED';
+          throw quotaErr;
+        }
+
         const isTransient = this.isTransientError(error);
 
         if (attempt < maxAttempts && isTransient) {
@@ -319,8 +356,13 @@ class GeminiService {
       }
     }
 
-    const appError = new Error((lastError && lastError.message) ? lastError.message : 'Failed to communicate with Gemini AI service');
-    appError.statusCode = (lastError && lastError.statusCode) || httpStatus.SERVICE_UNAVAILABLE;
+    const isQuota = this.isQuotaError(lastError);
+    const friendlyMessage = isQuota
+      ? 'The AI service is temporarily unavailable because the current API quota has been reached. Please try again later.'
+      : ((lastError && lastError.message) ? lastError.message : 'Failed to communicate with Gemini AI service');
+
+    const appError = new Error(friendlyMessage);
+    appError.statusCode = isQuota ? (httpStatus.TOO_MANY_REQUESTS || 429) : ((lastError && lastError.statusCode) || httpStatus.SERVICE_UNAVAILABLE);
     appError.code = (lastError && lastError.code) || errorCodes.AI_SERVICE_ERROR;
     appError.details = lastError ? lastError.stack : undefined;
     throw appError;

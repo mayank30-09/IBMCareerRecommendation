@@ -20,6 +20,19 @@ const errorHandler = (err, req, res, next) => {
     statusCode = httpStatus.FORBIDDEN;
   }
 
+  // Handle AI Quota Exceeded / Rate Limit errors cleanly
+  if (
+    errorCode !== errorCodes.RATE_LIMIT_EXCEEDED &&
+    (message.includes('[GoogleGenerativeAI Error]') ||
+      message.includes('Quota exceeded') ||
+      message.includes('resource_exhausted') ||
+      errorCode === 'AI_QUOTA_EXCEEDED')
+  ) {
+    statusCode = httpStatus.TOO_MANY_REQUESTS || 429;
+    errorCode = errorCodes.AI_SERVICE_ERROR || 'AI_SERVICE_ERROR';
+    message = 'The AI service is temporarily unavailable because the current API quota has been reached. Please try again later.';
+  }
+
   const requestId = req.id || req.requestId;
 
   // Log error using Pino
