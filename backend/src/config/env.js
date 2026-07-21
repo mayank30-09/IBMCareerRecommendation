@@ -1,4 +1,10 @@
-require('dotenv').config();
+const path = require('path');
+const dotenv = require('dotenv');
+
+// 1. Try default dotenv load (for production runtime environments like Render/Railway/Docker)
+// 2. Fall back to loading explicit local backend/.env if process.env.NODE_ENV is not populated
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const env = {
   PORT: process.env.PORT || '5000',
@@ -19,7 +25,17 @@ const env = {
  * Throws a fatal Error if required environment variables are missing or invalid.
  */
 function validateEnv(customEnv = null, options = { strict: true }) {
-  const targetEnv = customEnv || env;
+  let targetEnv = env;
+  let targetOptions = options;
+
+  if (customEnv && typeof customEnv === 'object') {
+    if (customEnv.PORT !== undefined || customEnv.NODE_ENV !== undefined) {
+      targetEnv = customEnv;
+    } else {
+      targetOptions = customEnv;
+    }
+  }
+
   const errors = [];
 
   const port = parseInt(targetEnv.PORT, 10);
@@ -47,7 +63,7 @@ function validateEnv(customEnv = null, options = { strict: true }) {
     errors.push(`Invalid RATE_LIMIT_MAX_REQUESTS: '${targetEnv.RATE_LIMIT_MAX_REQUESTS}'. Must be a positive integer.`);
   }
 
-  if (options.strict && targetEnv.NODE_ENV !== 'test') {
+  if (targetOptions.strict && targetEnv.NODE_ENV !== 'test') {
     if (!targetEnv.MONGODB_URI || typeof targetEnv.MONGODB_URI !== 'string' || targetEnv.MONGODB_URI.trim() === '') {
       errors.push('Missing MONGODB_URI. A valid MongoDB connection string is required.');
     }
