@@ -1,0 +1,450 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CareerPilot AI Backend API",
+    "description": "Production-grade Node.js/Express REST API serving AI-powered career recommendations via Google Gemini AI with MongoDB persistence.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "CareerPilot AI Team",
+      "email": "support@careerpilot.ai"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000",
+      "description": "Local Development Server"
+    },
+    {
+      "url": "https://api.careerpilot.ai",
+      "description": "Production API Server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "System Health",
+      "description": "Liveness and readiness endpoints for monitoring and orchestration"
+    },
+    {
+      "name": "Recommendations",
+      "description": "AI recommendation engine endpoints"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["System Health"],
+        "summary": "Check system liveness status",
+        "description": "Returns liveness information including status, uptime, application version, environment, and request tracing ID.",
+        "operationId": "getHealth",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/X-Request-ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "System is live and healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "status": "ok",
+                    "uptime": 1420,
+                    "version": "1.0.0",
+                    "environment": "production",
+                    "timestamp": "2026-07-21T21:00:00.000Z",
+                    "requestId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": ["System Health"],
+        "summary": "Check system readiness status",
+        "description": "Evaluates database connectivity (MongoDB) and internal Gemini service configuration readiness without making external network calls.",
+        "operationId": "getReady",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/X-Request-ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "System dependencies are ready to serve traffic",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "isReady": true,
+                    "status": "ready",
+                    "checks": {
+                      "database": "up",
+                      "gemini": "up"
+                    },
+                    "timestamp": "2026-07-21T21:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "One or more system dependencies are unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                },
+                "example": {
+                  "success": false,
+                  "data": {
+                    "isReady": false,
+                    "status": "unready",
+                    "checks": {
+                      "database": "down",
+                      "gemini": "up"
+                    },
+                    "timestamp": "2026-07-21T21:00:00.000Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recommendations": {
+      "post": {
+        "tags": ["Recommendations"],
+        "summary": "Generate AI career recommendation",
+        "description": "Processes user profile (skills, interests, education, experience, career goals), invokes Google Gemini AI, validates structured output, persists to MongoDB, and returns tailored recommendations.",
+        "operationId": "generateRecommendation",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/X-Request-ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationRequest"
+              },
+              "example": {
+                "skills": ["Node.js", "Express", "MongoDB", "Docker"],
+                "interests": ["Backend Engineering", "Distributed Systems"],
+                "education": "Bachelor of Science in Computer Science",
+                "experience": "2 years of full-stack web development experience.",
+                "careerGoals": "Senior Backend Architect leading cloud services."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recommendation generated and persisted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationSuccessResponse"
+                },
+                "example": {
+                  "success": true,
+                  "message": "Recommendation request received successfully",
+                  "data": {
+                    "requestId": "e4f5a6b7-c8d9-0123-4567-89abcdef0123",
+                    "recommendation": {
+                      "career": "Cloud Systems Architect",
+                      "confidence": 92,
+                      "reason": "Strong foundation in backend APIs, containerization, and database architecture.",
+                      "recommendedSkills": ["Kubernetes", "AWS", "gRPC", "Terraform"],
+                      "learningPath": [
+                        "Master container orchestration with Kubernetes",
+                        "Design microservice architecture on AWS",
+                        "Implement gRPC for internal service communications"
+                      ],
+                      "nextStep": "Build a multi-container microservice project deployed to Kubernetes."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure in request body fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "success": false,
+                  "message": "Validation failed",
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "details": [
+                      {
+                        "field": "skills",
+                        "message": "Skills must be an array with 1 to 20 items."
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "X-Request-ID": {
+        "name": "X-Request-ID",
+        "in": "header",
+        "description": "Optional client-provided correlation request ID string for distributed tracing",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "custom-trace-uuid-12345"
+        }
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "example": "ok" },
+              "uptime": { "type": "integer", "example": 1420 },
+              "version": { "type": "string", "example": "1.0.0" },
+              "environment": { "type": "string", "example": "production" },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "requestId": { "type": "string" }
+            }
+          }
+        }
+      },
+      "ReadinessResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "isReady": { "type": "boolean" },
+              "status": { "type": "string", "example": "ready" },
+              "checks": {
+                "type": "object",
+                "properties": {
+                  "database": { "type": "string", "example": "up" },
+                  "gemini": { "type": "string", "example": "up" }
+                }
+              },
+              "timestamp": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "RecommendationRequest": {
+        "type": "object",
+        "required": ["skills", "interests", "education"],
+        "properties": {
+          "skills": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "User's current technical or professional skills"
+          },
+          "interests": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "User's fields of interest or domain targets"
+          },
+          "education": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Highest level or current degree of education"
+          },
+          "experience": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Optional work or project experience summary"
+          },
+          "careerGoals": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Optional target roles or aspirational milestones"
+          }
+        }
+      },
+      "RecommendationSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "message": { "type": "string", "example": "Recommendation request received successfully" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "requestId": { "type": "string", "format": "uuid" },
+              "recommendation": {
+                "type": "object",
+                "properties": {
+                  "career": { "type": "string", "example": "Cloud Systems Architect" },
+                  "confidence": { "type": "number", "minimum": 0, "maximum": 100, "example": 92 },
+                  "reason": { "type": "string" },
+                  "recommendedSkills": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "learningPath": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "nextStep": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "message": { "type": "string" },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "example": "VALIDATION_ERROR" },
+              "details": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Forbidden": {
+        "description": "403 Forbidden - CORS policy block",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "success": false,
+              "message": "CORS policy blocked access for this origin",
+              "error": { "code": "CORS_ERROR" }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "404 Not Found - Route does not exist",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "success": false,
+              "message": "Route not found",
+              "error": { "code": "NOT_FOUND" }
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "413 Payload Too Large - Body size exceeds limit",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "success": false,
+              "message": "Request payload too large",
+              "error": { "code": "PAYLOAD_TOO_LARGE" }
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "429 Too Many Requests - Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "success": false,
+              "message": "Too many requests, please try again later",
+              "error": { "code": "RATE_LIMIT_EXCEEDED" }
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "500 Internal Server Error - Server or Database failure",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "success": false,
+              "message": "Internal Server Error",
+              "error": { "code": "SERVER_ERROR" }
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "503 Service Unavailable - AI service outage or timeout",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "example": {
+              "success": false,
+              "message": "Gemini AI service unavailable",
+              "error": { "code": "AI_SERVICE_ERROR" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

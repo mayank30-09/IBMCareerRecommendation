@@ -1,0 +1,139 @@
+{
+  "info": {
+    "_postman_id": "c7a8f9d0-1234-4567-89ab-cdef01234567",
+    "name": "CareerPilot AI Backend API v1.0.0",
+    "description": "Postman API Collection for CareerPilot AI backend endpoints, health checks, error responses, and recommendation generation.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "System Health",
+      "item": [
+        {
+          "name": "GET /health (Liveness)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-ID",
+                "value": "postman-liveness-check-001",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /ready (Readiness)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-ID",
+                "value": "postman-readiness-check-001",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ready",
+              "host": ["{{baseUrl}}"],
+              "path": ["ready"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Recommendations",
+      "item": [
+        {
+          "name": "POST /api/v1/recommendations (Valid Request)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "postman-valid-rec-001",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skills\": [\"JavaScript\", \"TypeScript\", \"Node.js\", \"Express\", \"MongoDB\", \"Docker\"],\n  \"interests\": [\"Backend Architecture\", \"AI Infrastructure\", \"Cloud Computing\"],\n  \"education\": \"Bachelor of Science in Software Engineering\",\n  \"experience\": \"3 years developing full-stack web applications and microservices.\",\n  \"careerGoals\": \"Lead AI Backend Architect creating scalable cloud systems.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recommendations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "recommendations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/v1/recommendations (400 Missing Skills - Error Example)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"interests\": [\"Backend Architecture\"],\n  \"education\": \"B.S. Computer Science\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recommendations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "recommendations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /api/v1/recommendations (413 Payload Too Large - Error Example)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skills\": [\"Node.js\"],\n  \"interests\": [\"Cloud\"],\n  \"education\": \"B.S.\",\n  \"experience\": \"EXCEEDING_LIMIT_TEXT...\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recommendations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "recommendations"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
