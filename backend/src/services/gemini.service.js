@@ -12,6 +12,7 @@ class GeminiService {
     this.fallbackModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     this.activeModel = null;
     this.client = null;
+    this.provider = 'gemini';
 
     const parsed = parseInt(this.rawTimeout, 10);
     this.timeoutMs = !isNaN(parsed) && parsed > 0 ? parsed : 15000;

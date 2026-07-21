@@ -51,7 +51,7 @@ function validateEnv(customEnv = null, options = { strict: true }) {
     errors.push(`Invalid NODE_ENV: '${targetEnv.NODE_ENV}'. Must be one of: ${validEnvs.join(', ')}.`);
   }
 
-  const validProviders = ['gemini', 'openrouter'];
+  const validProviders = ['gemini', 'openrouter', 'auto'];
   const provider = (targetEnv.AI_PROVIDER || 'gemini').toLowerCase().trim();
   if (!validProviders.includes(provider)) {
     errors.push(`Invalid AI_PROVIDER: '${targetEnv.AI_PROVIDER}'. Must be one of: ${validProviders.join(', ')}.`);
@@ -90,6 +90,13 @@ function validateEnv(customEnv = null, options = { strict: true }) {
         targetEnv.OPENROUTER_API_KEY.includes('xxxxxxxx')
       ) {
         errors.push('Missing OPENROUTER_API_KEY. A valid OpenRouter API key is required when AI_PROVIDER is openrouter.');
+      }
+    } else if (provider === 'auto') {
+      const hasOpenRouter = targetEnv.OPENROUTER_API_KEY && typeof targetEnv.OPENROUTER_API_KEY === 'string' && targetEnv.OPENROUTER_API_KEY.trim() !== '' && !targetEnv.OPENROUTER_API_KEY.includes('your-key') && !targetEnv.OPENROUTER_API_KEY.includes('xxxxxxxx');
+      const hasGemini = targetEnv.GEMINI_API_KEY && typeof targetEnv.GEMINI_API_KEY !== 'string' && targetEnv.GEMINI_API_KEY.trim() !== '';
+
+      if (!hasOpenRouter && !hasGemini) {
+        errors.push('Missing API key. At least one valid API key (OPENROUTER_API_KEY or GEMINI_API_KEY) is required when AI_PROVIDER is auto.');
       }
     }
   }

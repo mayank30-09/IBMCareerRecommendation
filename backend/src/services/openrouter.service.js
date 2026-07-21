@@ -9,8 +9,6 @@ const logger = require('../config/logger');
  */
 class OpenRouterService {
   constructor() {
-    this.apiKey = env.OPENROUTER_API_KEY;
-    this.model = env.OPENROUTER_MODEL || 'openai/gpt-oss-20b:free';
     this.rawTimeout = env.REQUEST_TIMEOUT;
     this.apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
     this.provider = 'openrouter';
@@ -20,17 +18,34 @@ class OpenRouterService {
   }
 
   /**
+   * Dynamically retrieves active API key from runtime environment.
+   */
+  getApiKey() {
+    return (process.env.OPENROUTER_API_KEY || env.OPENROUTER_API_KEY || '').trim();
+  }
+
+  /**
+   * Dynamically retrieves active model from runtime environment.
+   */
+  getModel() {
+    return (process.env.OPENROUTER_MODEL || env.OPENROUTER_MODEL || 'openai/gpt-oss-20b:free').trim();
+  }
+
+  /**
    * Validates configuration parameters.
    */
   validateConfig() {
-    if (!this.apiKey || typeof this.apiKey !== 'string' || this.apiKey.trim() === '' || this.apiKey.includes('your-key') || this.apiKey.includes('xxxxxxxx')) {
+    const apiKey = this.getApiKey();
+    const model = this.getModel();
+
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '' || apiKey.includes('your-key') || apiKey.includes('xxxxxxxx')) {
       const error = new Error('OPENROUTER_API_KEY is missing or invalid in environment variables');
       error.statusCode = httpStatus.INTERNAL_SERVER_ERROR;
       error.code = errorCodes.AI_CONFIG_ERROR;
       throw error;
     }
 
-    if (!this.model || typeof this.model !== 'string') {
+    if (!model || typeof model !== 'string') {
       const error = new Error('OPENROUTER_MODEL must be a non-empty string');
       error.statusCode = httpStatus.INTERNAL_SERVER_ERROR;
       error.code = errorCodes.AI_CONFIG_ERROR;
@@ -97,6 +112,9 @@ class OpenRouterService {
   async sendPrompt(arg1, arg2) {
     this.validateConfig();
 
+    const apiKey = this.getApiKey();
+    const activeModel = this.getModel();
+
     let systemContent = 'You are a precise career analyst. Always return valid JSON only.';
     let userContent = '';
 
@@ -112,6 +130,18 @@ class OpenRouterService {
       throw err;
     }
 
+    // Diagnostic logging before request execution
+    logger.info(
+      {
+        provider: this.provider,
+        model: activeModel,
+        hasApiKey: !!apiKey,
+        keyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : 'NONE',
+        apiUrl: this.apiUrl
+      },
+      'Dispatching prompt request to OpenRouter API'
+    );
+
     const controller = new AbortController();
     const timeoutTimer = setTimeout(() => {
       controller.abort();
@@ -123,13 +153,13 @@ class OpenRouterService {
       const response = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'http://localhost',
           'X-Title': 'CareerPilot AI'
         },
         body: JSON.stringify({
-          model: this.model,
+          model: activeModel,
           messages: [
             { role: 'system', content: systemContent },
             { role: 'user', content: userContent }
@@ -145,11 +175,26 @@ class OpenRouterService {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
+        const responseHeaders = response.headers ? Object.fromEntries(response.headers.entries()) : {};
+
+        // Log complete diagnostic upstream error payload
+        logger.error(
+          {
+            provider: this.provider,
+            model: activeModel,
+            status: response.status,
+            statusText: response.statusText,
+            headers: responseHeaders,
+            upstreamResponseBody: errorText
+          },
+          `Upstream OpenRouter API error response (HTTP ${response.status})`
+        );
         
         if (response.status === 401) {
           const err = new Error('Unauthorized: Invalid OpenRouter API key provided');
           err.statusCode = httpStatus.UNAUTHORIZED;
           err.code = errorCodes.AI_CONFIG_ERROR;
+          err.upstreamResponseBody = errorText;
           throw err;
         }
 
@@ -157,12 +202,14 @@ class OpenRouterService {
           const err = new Error('The AI service is temporarily unavailable because the current API quota has been reached. Please try again later.');
           err.statusCode = httpStatus.TOO_MANY_REQUESTS || 429;
           err.code = errorCodes.AI_SERVICE_ERROR;
+          err.upstreamResponseBody = errorText;
           throw err;
         }
 
         const err = new Error(`OpenRouter API request failed with status ${response.status}: ${errorText}`);
         err.statusCode = response.status >= 500 ? httpStatus.SERVICE_UNAVAILABLE : httpStatus.BAD_REQUEST;
         err.code = errorCodes.AI_SERVICE_ERROR;
+        err.upstreamResponseBody = errorText;
         throw err;
       }
 
@@ -183,7 +230,7 @@ class OpenRouterService {
       logger.info(
         {
           provider: this.provider,
-          model: this.model,
+          model: activeModel,
           responseTime,
           usageMetadata
         },
@@ -192,7 +239,7 @@ class OpenRouterService {
 
       return {
         text,
-        model: this.model,
+        model: activeModel,
         finishReason,
         usageMetadata,
         responseTime

@@ -37,9 +37,9 @@ const errorHandler = (err, req, res, next) => {
 
   // Log error using Pino
   if (statusCode >= 500) {
-    logger.error({ requestId, err }, message);
+    logger.error({ requestId, err, upstreamBody: err.upstreamResponseBody }, message);
   } else {
-    logger.warn({ requestId, code: errorCode, statusCode }, message);
+    logger.warn({ requestId, code: errorCode, statusCode, rawMessage: err.message, upstreamBody: err.upstreamResponseBody }, message);
   }
 
   res.status(statusCode).json({
