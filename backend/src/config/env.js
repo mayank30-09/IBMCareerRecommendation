@@ -17,6 +17,8 @@ const env = {
   GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || '',
   OPENROUTER_MODEL: process.env.OPENROUTER_MODEL || 'openai/gpt-oss-20b:free',
+  GROQ_API_KEY: process.env.GROQ_API_KEY || '',
+  GROQ_MODEL: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
   REQUEST_TIMEOUT: process.env.REQUEST_TIMEOUT || '15000',
   BODY_LIMIT: process.env.BODY_LIMIT || '10kb',
   RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS || '900000', // 15 mins
@@ -51,7 +53,7 @@ function validateEnv(customEnv = null, options = { strict: true }) {
     errors.push(`Invalid NODE_ENV: '${targetEnv.NODE_ENV}'. Must be one of: ${validEnvs.join(', ')}.`);
   }
 
-  const validProviders = ['gemini', 'openrouter', 'auto'];
+  const validProviders = ['gemini', 'openrouter', 'groq', 'auto'];
   const provider = (targetEnv.AI_PROVIDER || 'gemini').toLowerCase().trim();
   if (!validProviders.includes(provider)) {
     errors.push(`Invalid AI_PROVIDER: '${targetEnv.AI_PROVIDER}'. Must be one of: ${validProviders.join(', ')}.`);
@@ -91,12 +93,23 @@ function validateEnv(customEnv = null, options = { strict: true }) {
       ) {
         errors.push('Missing OPENROUTER_API_KEY. A valid OpenRouter API key is required when AI_PROVIDER is openrouter.');
       }
+    } else if (provider === 'groq') {
+      if (
+        !targetEnv.GROQ_API_KEY ||
+        typeof targetEnv.GROQ_API_KEY !== 'string' ||
+        targetEnv.GROQ_API_KEY.trim() === '' ||
+        targetEnv.GROQ_API_KEY.includes('your-key') ||
+        targetEnv.GROQ_API_KEY.includes('xxxxxxxx')
+      ) {
+        errors.push('Missing GROQ_API_KEY. A valid Groq API key is required when AI_PROVIDER is groq.');
+      }
     } else if (provider === 'auto') {
       const hasOpenRouter = targetEnv.OPENROUTER_API_KEY && typeof targetEnv.OPENROUTER_API_KEY === 'string' && targetEnv.OPENROUTER_API_KEY.trim() !== '' && !targetEnv.OPENROUTER_API_KEY.includes('your-key') && !targetEnv.OPENROUTER_API_KEY.includes('xxxxxxxx');
+      const hasGroq = targetEnv.GROQ_API_KEY && typeof targetEnv.GROQ_API_KEY === 'string' && targetEnv.GROQ_API_KEY.trim() !== '' && !targetEnv.GROQ_API_KEY.includes('your-key') && !targetEnv.GROQ_API_KEY.includes('xxxxxxxx');
       const hasGemini = targetEnv.GEMINI_API_KEY && typeof targetEnv.GEMINI_API_KEY !== 'string' && targetEnv.GEMINI_API_KEY.trim() !== '';
 
-      if (!hasOpenRouter && !hasGemini) {
-        errors.push('Missing API key. At least one valid API key (OPENROUTER_API_KEY or GEMINI_API_KEY) is required when AI_PROVIDER is auto.');
+      if (!hasOpenRouter && !hasGroq && !hasGemini) {
+        errors.push('Missing API key. At least one valid API key (OPENROUTER_API_KEY, GROQ_API_KEY, or GEMINI_API_KEY) is required when AI_PROVIDER is auto.');
       }
     }
   }

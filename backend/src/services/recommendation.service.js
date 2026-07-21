@@ -2,6 +2,7 @@ const { randomUUID } = require('crypto');
 const env = require('../config/env');
 const geminiService = require('./gemini.service');
 const openRouterService = require('./openrouter.service');
+const groqService = require('./groq.service');
 const { buildRecommendationPrompt, PROMPT_VERSION } = require('../prompts/recommendation.prompt');
 const { validateAiRecommendation } = require('../validators/aiResponse.validator');
 const recommendationRepository = require('../repositories/recommendation.repository');
@@ -9,12 +10,15 @@ const logger = require('../config/logger');
 
 /**
  * Returns the active AI provider service based on the AI_PROVIDER environment variable.
- * @returns {Object} Active AI service instance (geminiService or openRouterService)
+ * @returns {Object} Active AI service instance (geminiService, openRouterService, or groqService)
  */
 const getAiService = () => {
   const provider = (process.env.AI_PROVIDER || env.AI_PROVIDER || 'gemini').toLowerCase().trim();
   if (provider === 'openrouter') {
     return openRouterService;
+  }
+  if (provider === 'groq') {
+    return groqService;
   }
   return geminiService;
 };
@@ -44,56 +48,86 @@ const isProviderQuotaOrUnavailableError = (err) => {
 };
 
 /**
- * Executes AI prompt generation with dynamic provider resolution and auto-fallback logic.
+ * Executes AI prompt generation with dynamic provider resolution and multi-provider auto-fallback logic:
+ * Sequence: OpenRouter -> Groq -> Gemini
  */
 const executeWithFallback = async (promptText, providerName, requestId) => {
   if (providerName === 'auto') {
-    // 1. Try OpenRouter first as primary provider
+    // 1. Primary Attempt: OpenRouter
     try {
       logger.info({ requestId, provider: 'openrouter', mode: 'auto' }, 'Attempting primary AI provider: openrouter');
       const response = await openRouterService.sendPrompt(promptText);
       const rawJson = openRouterService.extractJson(response.text);
       return { response, rawJson, providerUsed: 'openrouter' };
     } catch (openRouterErr) {
-      if (isProviderQuotaOrUnavailableError(openRouterErr)) {
+      if (isProviderQuotaOrUnavailableError(openRouterErr) || openRouterErr.code === 'AI_CONFIG_ERROR') {
         logger.warn(
           {
             requestId,
             primaryProvider: 'openrouter',
-            fallbackProvider: 'gemini',
+            fallbackProvider: 'groq',
             reason: openRouterErr.message
           },
-          'Primary provider openrouter hit quota/rate limit error. Triggering automatic fallback to gemini provider.'
+          'Primary provider openrouter hit quota/config error. Triggering fallback to groq provider.'
         );
 
-        // 2. Automatically retry using Gemini fallback provider
+        // 2. Secondary Attempt: Groq
         try {
-          const response = await geminiService.sendPrompt(promptText);
-          const rawJson = geminiService.extractJson(response.text);
-          return { response, rawJson, providerUsed: 'gemini' };
-        } catch (geminiErr) {
-          logger.error(
-            {
-              requestId,
-              primaryError: openRouterErr.message,
-              fallbackError: geminiErr.message
-            },
-            'Both primary (openrouter) and fallback (gemini) AI providers failed in auto mode.'
-          );
-          throw geminiErr;
+          logger.info({ requestId, provider: 'groq', mode: 'auto' }, 'Attempting secondary AI provider: groq');
+          const response = await groqService.sendPrompt(promptText);
+          const rawJson = groqService.extractJson(response.text);
+          return { response, rawJson, providerUsed: 'groq' };
+        } catch (groqErr) {
+          if (isProviderQuotaOrUnavailableError(groqErr) || groqErr.code === 'AI_CONFIG_ERROR') {
+            logger.warn(
+              {
+                requestId,
+                secondaryProvider: 'groq',
+                fallbackProvider: 'gemini',
+                reason: groqErr.message
+              },
+              'Secondary provider groq hit quota/config error. Triggering tertiary fallback to gemini provider.'
+            );
+
+            // 3. Tertiary Attempt: Gemini
+            try {
+              logger.info({ requestId, provider: 'gemini', mode: 'auto' }, 'Attempting tertiary AI provider: gemini');
+              const response = await geminiService.sendPrompt(promptText);
+              const rawJson = geminiService.extractJson(response.text);
+              return { response, rawJson, providerUsed: 'gemini' };
+            } catch (geminiErr) {
+              logger.error(
+                {
+                  requestId,
+                  openRouterError: openRouterErr.message,
+                  groqError: groqErr.message,
+                  geminiError: geminiErr.message
+                },
+                'All AI providers (OpenRouter, Groq, Gemini) failed in auto fallback mode.'
+              );
+              throw geminiErr;
+            }
+          } else {
+            throw groqErr;
+          }
         }
       } else {
-        // Non-quota error on OpenRouter, rethrow error
         throw openRouterErr;
       }
     }
   }
 
-  // Explicit provider choice (gemini or openrouter)
-  const aiService = providerName === 'openrouter' ? openRouterService : geminiService;
+  // Explicit provider choice (gemini, openrouter, or groq)
+  let aiService = geminiService;
+  if (providerName === 'openrouter') {
+    aiService = openRouterService;
+  } else if (providerName === 'groq') {
+    aiService = groqService;
+  }
+
   const response = await aiService.sendPrompt(promptText);
   const rawJson = aiService.extractJson(response.text);
-  return { response, rawJson, providerUsed: providerName === 'openrouter' ? 'openrouter' : 'gemini' };
+  return { response, rawJson, providerUsed: aiService.provider };
 };
 
 /**

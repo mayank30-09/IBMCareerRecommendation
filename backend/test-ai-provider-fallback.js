@@ -1,9 +1,9 @@
 require('dotenv').config();
 const assert = require('assert');
 const openRouterService = require('./src/services/openrouter.service');
+const groqService = require('./src/services/groq.service');
 const geminiService = require('./src/services/gemini.service');
 const { generateRecommendation } = require('./src/services/recommendation.service');
-const httpStatus = require('./src/constants/httpStatus');
 const errorCodes = require('./src/constants/errorCodes');
 
 // Mock repository to inspect saved document metadata
@@ -35,6 +35,7 @@ async function runFallbackTests() {
   console.log('==================================================\n');
 
   const origOpenRouterSendPrompt = openRouterService.sendPrompt;
+  const origGroqSendPrompt = groqService.sendPrompt;
   const origGeminiSendPrompt = geminiService.sendPrompt;
 
   try {
@@ -52,6 +53,10 @@ async function runFallbackTests() {
       usageMetadata: { total_tokens: 150 }
     });
 
+    groqService.sendPrompt = async () => {
+      throw new Error('Groq should NOT be called when OpenRouter succeeds!');
+    };
+
     geminiService.sendPrompt = async () => {
       throw new Error('Gemini should NOT be called when OpenRouter succeeds!');
     };
@@ -62,9 +67,9 @@ async function runFallbackTests() {
     console.log(' -> PASS: Successfully executed via primary OpenRouter provider.\n');
 
     // ---------------------------------------------------------
-    // TEST 2: OpenRouter 429 -> Gemini Fallback Success (AI_PROVIDER=auto)
+    // TEST 2: OpenRouter 429 -> Gemini Fallback Success (AI_PROVIDER=auto when Groq unconfigured/429)
     // ---------------------------------------------------------
-    console.log('[TEST 2] AI_PROVIDER=auto -> OpenRouter 429 triggers Gemini Fallback...');
+    console.log('[TEST 2] AI_PROVIDER=auto -> OpenRouter 429 triggers Gemini Fallback (with Groq skipped)...');
     process.env.AI_PROVIDER = 'auto';
 
     openRouterService.sendPrompt = async () => {
@@ -72,6 +77,13 @@ async function runFallbackTests() {
       quotaErr.statusCode = 429;
       quotaErr.code = errorCodes.AI_SERVICE_ERROR;
       throw quotaErr;
+    };
+
+    groqService.sendPrompt = async () => {
+      const groqErr = new Error('Groq API Key Unconfigured');
+      groqErr.statusCode = 500;
+      groqErr.code = errorCodes.AI_CONFIG_ERROR;
+      throw groqErr;
     };
 
     let geminiCalled = false;
@@ -93,9 +105,9 @@ async function runFallbackTests() {
     console.log(' -> PASS: OpenRouter 429 correctly triggered Gemini fallback.\n');
 
     // ---------------------------------------------------------
-    // TEST 3: Both Primary (OpenRouter) and Fallback (Gemini) Fail (AI_PROVIDER=auto)
+    // TEST 3: All Primary, Secondary, and Tertiary Providers Fail (AI_PROVIDER=auto)
     // ---------------------------------------------------------
-    console.log('[TEST 3] AI_PROVIDER=auto -> Both OpenRouter and Gemini Fail...');
+    console.log('[TEST 3] AI_PROVIDER=auto -> OpenRouter, Groq, and Gemini All Fail...');
     process.env.AI_PROVIDER = 'auto';
 
     openRouterService.sendPrompt = async () => {
@@ -103,6 +115,13 @@ async function runFallbackTests() {
       quotaErr.statusCode = 429;
       quotaErr.code = errorCodes.AI_SERVICE_ERROR;
       throw quotaErr;
+    };
+
+    groqService.sendPrompt = async () => {
+      const groqQuotaErr = new Error('Groq Quota exceeded');
+      groqQuotaErr.statusCode = 429;
+      groqQuotaErr.code = errorCodes.AI_SERVICE_ERROR;
+      throw groqQuotaErr;
     };
 
     geminiService.sendPrompt = async () => {
@@ -120,9 +139,9 @@ async function runFallbackTests() {
         assert(err.statusCode === 429 || err.code === errorCodes.AI_SERVICE_ERROR);
         return true;
       },
-      'Expected generateRecommendation to throw clean error when both providers fail'
+      'Expected generateRecommendation to throw clean error when all providers fail'
     );
-    console.log(' -> PASS: Handled failure gracefully when both providers fail.\n');
+    console.log(' -> PASS: Handled failure gracefully when all providers fail.\n');
 
     console.log('==================================================');
     console.log(' SUMMARY: ALL AI FALLBACK TESTS PASSED SUCCESSFULLY ');
@@ -130,6 +149,7 @@ async function runFallbackTests() {
   } finally {
     // Restore mocks
     openRouterService.sendPrompt = origOpenRouterSendPrompt;
+    groqService.sendPrompt = origGroqSendPrompt;
     geminiService.sendPrompt = origGeminiSendPrompt;
     process.env.AI_PROVIDER = 'gemini';
   }
